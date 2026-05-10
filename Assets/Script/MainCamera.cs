@@ -10,33 +10,42 @@ namespace Archaeopteryx
 
         private readonly ReactiveProperty<Transform> _targetRP = new ReactiveProperty<Transform>();
 
+        private Vector3 _targetPos;
+
+        [SerializeField, Range(0.01f, 1f)]
+        private float _followSmooth = 0.1f;
+
         private void Awake()
         {
-            // Inspectorで設定された初期値を流す
+            // Inspector初期値を反映
             _targetRP.Value = _target;
         }
 
         private void Start()
         {
-            // ターゲット変更時に追従開始
             _targetRP
                 .Where(t => t != null)
                 .Select(t => t.ObserveEveryValueChanged(x => x.position))
-                .Switch() // ターゲット変更時に購読切り替え
+                .Switch()
                 .Subscribe(pos =>
                 {
-                    var current = transform.position;
-                    var target = new Vector3(
-                        pos.x + _offsetPosition.x,
-                        pos.y + _offsetPosition.y,
-                        transform.position.z + _offsetPosition.z);
-
-                    transform.position = Vector3.Lerp(current, target, 0.1f);
-                    Debug.Log(transform.position);
-                }).AddTo(this);
+                    // オフセットは必ずターゲット基準で統一
+                    _targetPos = pos + _offsetPosition;
+                })
+                .AddTo(this);
         }
 
-        // 外部からアタッチ可能
+        private void LateUpdate()
+        {
+            // カメラ追従は物理更新後にやる（重要）
+            transform.position = Vector3.Lerp(
+                transform.position,
+                _targetPos,
+                _followSmooth
+            );
+        }
+
+        // 外部からターゲット差し替え可能
         public void SetTarget(Transform newTarget)
         {
             _targetRP.Value = newTarget;
