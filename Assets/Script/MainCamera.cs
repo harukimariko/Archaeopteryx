@@ -5,50 +5,84 @@ namespace Archaeopteryx
 {
     public class MainCamera : MonoBehaviour
     {
+        [SerializeField] private Camera _camera;
+
         [SerializeField] private Transform _target;
+
         [SerializeField] private Vector3 _offsetPosition;
 
-        private readonly ReactiveProperty<Transform> _targetRP = new ReactiveProperty<Transform>();
-
-        private Vector3 _targetPos;
-
-        [SerializeField, Range(0.01f, 1f)]
+        [SerializeField, Range(0.01f, 15.0f)]
         private float _followSmooth = 0.1f;
 
-        private void Awake()
-        {
-            // Inspector初期値を反映
-            _targetRP.Value = _target;
-        }
+        [Header("Dead Zone")]
+        [SerializeField]
+        private bool _isDeadZone = false;
+
+        [SerializeField]
+        private Vector2 _deadZoneMin = new Vector2(0.4f, 0.4f);
+
+        [SerializeField]
+        private Vector2 _deadZoneMax = new Vector2(0.6f, 0.6f);
 
         private void Start()
         {
-            _targetRP
-                .Where(t => t != null)
-                .Select(t => t.ObserveEveryValueChanged(x => x.position))
-                .Switch()
-                .Subscribe(pos =>
-                {
-                    // オフセットは必ずターゲット基準で統一
-                    _targetPos = pos + _offsetPosition;
-                })
+            Observable.EveryLateUpdate()
+                .Subscribe(_ => Move())
                 .AddTo(this);
         }
 
-        private void LateUpdate()
+        private void Move()
         {
-            // カメラ追従は物理更新後にやる（重要）
-            transform.position = Vector3.Lerp(
-                transform.position,
-                _targetPos,
-                _followSmooth
-            );
-        }
+            if (_target == null)
+                return;
 
-        // 外部からターゲット差し替え可能
-        public void SetTarget(Transform newTarget)
-        {
-            _targetRP.Value = newTarget;
+            // =========================
+            // Dead Zone
+            // =========================
+
+            Vector3 viewportPos =
+                _camera.WorldToViewportPoint(
+                    _target.position
+                );
+
+            bool insideDeadZone =
+                viewportPos.x > _deadZoneMin.x &&
+                viewportPos.x < _deadZoneMax.x &&
+                viewportPos.y > _deadZoneMin.y &&
+                viewportPos.y < _deadZoneMax.y;
+
+            if (_isDeadZone && insideDeadZone)
+                return;
+
+            // =========================
+            // Target Position
+            // =========================
+
+            Vector3 targetPos =
+                _target.position + _offsetPosition;
+
+            Vector3 currentPos =
+                transform.position;
+
+            // XだけLerp
+            currentPos.x = Mathf.Lerp(
+                currentPos.x,
+                targetPos.x,
+                _followSmooth * Time.deltaTime
+            );
+
+            // YだけLerp
+            currentPos.y = Mathf.Lerp(
+                currentPos.y,
+                targetPos.y,
+                _followSmooth * Time.deltaTime
+            );
+
+            // Zは一定距離間
+            currentPos.z = targetPos.z;
+
+            // Zは変更しない
+            transform.position = currentPos;
         }
     }
 }

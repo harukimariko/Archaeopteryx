@@ -1,27 +1,37 @@
+using UniRx;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
 namespace Archaeopteryx
 {
-
     public class PlayerController : MonoBehaviour
     {
-        [SerializeField] private Rigidbody rb;
-        [SerializeField] private float moveSpeed = 6f;
+        [SerializeField]
+        private Camera _mainCamera;
 
-        private InputAction moveAction;
-        private Vector2 moveInput;
+        [SerializeField]
+        private float _moveSpeed = 6f;
+
+        [Header("Viewport Clamp")]
+        [SerializeField]
+        private float _minX = 0.1f;
+
+        [SerializeField]
+        private float _maxX = 0.9f;
+
+        [SerializeField]
+        private float _minY = 0.1f;
+
+        [SerializeField]
+        private float _maxY = 0.9f;
+
+        private InputAction _moveAction;
 
         private void Awake()
         {
-            if (rb == null)
-                rb = GetComponent<Rigidbody>();
+            _moveAction = new InputAction("Move");
 
-            // Input Actionをコードで作る
-            moveAction = new InputAction("Move", InputActionType.Value);
-
-            // WASDバインド
-            moveAction.AddCompositeBinding("2DVector")
+            _moveAction.AddCompositeBinding("2DVector")
                 .With("Up", "<Keyboard>/w")
                 .With("Down", "<Keyboard>/s")
                 .With("Left", "<Keyboard>/a")
@@ -30,33 +40,64 @@ namespace Archaeopteryx
 
         private void OnEnable()
         {
-            moveAction.Enable();
+            _moveAction.Enable();
+
+            Observable.EveryUpdate()
+                .Subscribe(_ => Move())
+                .AddTo(this);
         }
 
         private void OnDisable()
         {
-            moveAction.Disable();
-        }
-
-        private void Update()
-        {
-            moveInput = moveAction.ReadValue<Vector2>();
-        }
-
-        private void FixedUpdate()
-        {
-            Move();
+            _moveAction.Disable();
         }
 
         private void Move()
         {
-            Vector3 dir = new Vector3(moveInput.x, moveInput.y, 0f);
+            Vector2 input =
+                _moveAction.ReadValue<Vector2>();
 
-            Vector3 velocity = rb.linearVelocity;
-            velocity.x = dir.x * moveSpeed;
-            velocity.y = dir.y * moveSpeed;
+            Vector3 move =
+                new Vector3(input.x, input.y, 0f);
 
-            rb.linearVelocity = velocity;
+            transform.position +=
+                move *
+                _moveSpeed *
+                Time.deltaTime;
+
+            ClampViewport();
+        }
+
+        private void ClampViewport()
+        {
+            // World → Viewport
+            Vector3 viewportPos =
+                _mainCamera.WorldToViewportPoint(
+                    transform.position
+                );
+
+            // Clamp
+            viewportPos.x =
+                Mathf.Clamp(
+                    viewportPos.x,
+                    _minX,
+                    _maxX
+                );
+
+            viewportPos.y =
+                Mathf.Clamp(
+                    viewportPos.y,
+                    _minY,
+                    _maxY
+                );
+
+            // Viewport → World
+            Vector3 worldPos =
+                _mainCamera.ViewportToWorldPoint(
+                    viewportPos
+                );
+
+            transform.position = worldPos;
         }
     }
 }
